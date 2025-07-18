@@ -1,6 +1,6 @@
-import './style.css'
 import * as THREE from 'three';
-import { TextureLoader, RepeatWrapping, NearestFilter, LinearMipMapLinearFilter } from 'three';
+
+console.log('main.ts script loaded and running');
 
 // --- Screen definitions ---
 type ScreenConfig = {
@@ -62,13 +62,63 @@ if (app) {
   const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
   // --- Texture setup ---
-  const textureLoader = new TextureLoader();
-  const stoneTexture = textureLoader.load('/textures/stone.jpg');
-  stoneTexture.wrapS = stoneTexture.wrapT = RepeatWrapping;
-  stoneTexture.repeat.set(4, 4);
-  const grassTexture = textureLoader.load('/textures/grass.jpg');
-  grassTexture.wrapS = grassTexture.wrapT = RepeatWrapping;
-  grassTexture.repeat.set(4, 4);
+  // Remove TextureLoader and image loading
+  // Procedural stone texture
+  function createStripeTexture(size = 512, stripes = 12): THREE.Texture {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    const stripeWidth = size / stripes;
+    for (let i = 0; i < stripes; i++) {
+      ctx.fillStyle = i % 2 === 0 ? '#bbbbbb' : '#444444';
+      ctx.fillRect(i * stripeWidth, 0, stripeWidth, size);
+    }
+    const tex = new THREE.Texture(canvas);
+    tex.needsUpdate = true;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(4, 4);
+    tex.minFilter = THREE.LinearMipMapLinearFilter;
+    tex.magFilter = THREE.NearestFilter;
+    return tex;
+  }
+  // Procedural grass texture
+  function createFishboneTexture(size = 512, bones = 16): THREE.Texture {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#3a7a2a';
+    ctx.fillRect(0, 0, size, size);
+    ctx.strokeStyle = '#e0e0e0';
+    ctx.lineWidth = 4;
+    for (let i = 0; i < bones; i++) {
+      const y = (i + 1) * (size / (bones + 1));
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(size, y);
+      ctx.stroke();
+      // Draw diagonal 'bones'
+      for (let x = 0; x < size; x += size / 8) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + size / 16, y - size / 16);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + size / 16, y + size / 16);
+        ctx.stroke();
+      }
+    }
+    const tex = new THREE.Texture(canvas);
+    tex.needsUpdate = true;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(4, 4);
+    tex.minFilter = THREE.LinearMipMapLinearFilter;
+    tex.magFilter = THREE.NearestFilter;
+    return tex;
+  }
+  const stoneTexture = createStripeTexture();
+  const grassTexture = createFishboneTexture();
+  const checkerTexture = createCheckerboardTexture();
 
   function createCheckerboardTexture(size = 512, squares = 8): THREE.Texture {
     const canvas = document.createElement('canvas');
@@ -83,13 +133,12 @@ if (app) {
     }
     const tex = new THREE.Texture(canvas);
     tex.needsUpdate = true;
-    tex.wrapS = tex.wrapT = RepeatWrapping;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(4, 4);
-    tex.minFilter = LinearMipMapLinearFilter;
-    tex.magFilter = NearestFilter;
+    tex.minFilter = THREE.LinearMipMapLinearFilter;
+    tex.magFilter = THREE.NearestFilter;
     return tex;
   }
-  const checkerTexture = createCheckerboardTexture();
 
   // --- Objects ---
   let ground: THREE.Mesh;
@@ -98,6 +147,7 @@ if (app) {
   let player: THREE.Group;
   let playerTarget: THREE.Vector3 | null = null;
   const playerSpeed = 0.07;
+  let showItemMessage = false;
 
   // --- Overlay for messages ---
   let overlay = document.createElement('div');
@@ -112,13 +162,17 @@ if (app) {
   overlay.style.fontSize = '1.2rem';
   overlay.style.display = 'none';
   overlay.style.zIndex = '10';
+  overlay.style.border = '4px solid red'; // Debug border
   document.body.appendChild(overlay);
 
   function showOverlay(message: string) {
+    console.log('showOverlay called with:', message); // Debug log
+    showItemMessage = true;
     overlay.textContent = message;
     overlay.style.display = 'block';
     setTimeout(() => {
       overlay.style.display = 'none';
+      showItemMessage = false;
     }, 2000);
   }
 
@@ -177,6 +231,7 @@ if (app) {
   function setupScreen(screenIdx: number, entrySide?: 'left' | 'right') {
     // Remove previous objects
     while (scene.children.length > 0) scene.remove(scene.children[0]);
+    showItemMessage = false;
 
     // Ground
     const groundGeo = new THREE.PlaneGeometry(8, 8);
@@ -290,6 +345,7 @@ if (app) {
   }
 
   function onClick(event: MouseEvent) {
+    console.log('onClick called', event);
     // Use canvas bounds for correct mouse mapping
     const rect = canvas.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -299,6 +355,7 @@ if (app) {
     raycaster.setFromCamera(mouse, camera);
     // Check hotspot first
     const hotspotHit = raycaster.intersectObject(hotspot);
+    console.log('hotspotHit', hotspotHit);
     if (hotspotHit.length > 0) {
       playerTarget = hotspot.position.clone();
       playerTarget.y = 0; // move to base of hotspot
@@ -309,14 +366,22 @@ if (app) {
     }
     // Check item
     const itemHit = raycaster.intersectObject(item);
+    console.log('itemHit', itemHit);
     if (itemHit.length > 0) {
-      playerTarget = item.position.clone();
-      playerTarget.y = 0; // move to base of item
-      playerPath = [];
+      console.log('Player position:', player.position, 'Item position:', item.position);
+      // If player is already at the item, show the message immediately
+      if (player.position.distanceTo(item.position) < 0.3) {
+        showOverlay(screens[currentScreen].itemMessage);
+      } else {
+        playerTarget = item.position.clone();
+        playerTarget.y = 0; // move to base of item
+        playerPath = [];
+      }
       return;
     }
     // Check ground
     const groundHit = raycaster.intersectObject(ground);
+    console.log('groundHit', groundHit);
     if (groundHit.length > 0) {
       const target = groundHit[0].point.clone();
       target.y = 0;
@@ -336,7 +401,6 @@ if (app) {
   window.addEventListener('click', onClick);
 
   // --- Animation loop ---
-  let showItemMessage = false;
   function animate() {
     requestAnimationFrame(animate);
     // Move player if needed

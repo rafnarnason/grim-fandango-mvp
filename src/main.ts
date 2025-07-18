@@ -126,7 +126,7 @@ if (app) {
   let pendingScreenChange: number | null = null;
   let pendingEntrySide: 'left' | 'right' | null = null;
   // Helper: determine entry/exit side for contextual positioning
-  function getEntrySide(fromScreen: number, toScreen: number): 'left' | 'right' {
+  function getEntrySide(fromScreen: number): 'left' | 'right' {
     // For this MVP, right exit (hotspot x > 0) means enter left, left exit (hotspot x < 0) means enter right
     const hotspotX = screens[fromScreen].hotspotPosition.x;
     return hotspotX > 0 ? 'left' : 'right';
@@ -304,7 +304,7 @@ if (app) {
       playerTarget.y = 0; // move to base of hotspot
       playerPath = [];
       pendingScreenChange = screens[currentScreen].hotspotTargetScreen;
-      pendingEntrySide = getEntrySide(currentScreen, pendingScreenChange);
+      pendingEntrySide = getEntrySide(currentScreen);
       return;
     }
     // Check item
